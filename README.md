@@ -1,5 +1,5 @@
 # PHP2550-Project-Portfolio
-A portfolio for PHP2550, Practical Data Analysis course projects at Brown University. The language used is R
+A portfolio for PHP2550, Practical Data Analysis course projects at Brown University. The language used for the projects is R, version 4.3.2.
 
 ## Data Privacy
 Data used for Project 1 and Project 2 can only be shared with the instructor, students, and TA of this class. The report and code itself can be public as long as it does not contain any raw or identifiable data and instead presents results at a summary level.
