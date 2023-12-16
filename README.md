@@ -1,2 +1,2 @@
-# PHP2550-Project-Repository
-A repository for PHP2550 projects.
+# PHP2550-Project-Portfolio
+A portfolio for PHP2550 projects.
