@@ -131,6 +131,29 @@ center_trach_death %>% kable(booktabs = T, escape = T, align = "c",
 
   
 ```
+Table 3 further displays some key variables stratified by the center, showing that they differ significantly regarding the baseline. Infants in Center 1 are characterized by a lower median gestational age, shorter birth length, and reduced birth weight, with a higher percentage of trach and death outcomes. Conversely, while infants in Center 5 exhibit more worse baseline characteristics but has a lower percentage in the trach and death result presented above.
+```{r}
+data_demo[, -c(1, 15:26, 28, 29, 30)] %>%
+  tbl_summary(by = center, missing = "no",
+              label = list(mat_ethn ~ "Maternal Ethnicity",
+                           bw ~ "Birth Weight (g)",
+                           ga ~ "Obstetrical Gestational Age",
+                           blength ~ "Birth Length (cm)",
+                           birth_hc ~ "Birth Head Hircumference (cm)",
+                           gender ~ "Gender",
+                           del_method ~ "Delivery Method",
+                           prenat_ster ~ "Prenatal Corticosteroids",
+                           com_prenat_ster ~ "Complete Prenatal Steroids",
+                           mat_chorio ~ "Maternal Chorioamnionitis",
+                           sga ~ "Small for Gestational Age",
+                           any_surf ~ "Received Surfactant",
+                           hosp_dc_ga ~ "Hospital Discharge Gestational Age"
+    ))%>%
+  add_p() %>%
+  bold_labels() %>%
+  as_kable_extra(booktabs = T, escape = F, caption = "Demographics and Clinical Diagnosis in Infants across Center") %>%
+  kable_styling(latex_options = "scale_down") %>% landscape()
+```
 
 ```{r, results='hide'}
 trach_contingency_table <- table(data$center, data$Trach)
@@ -433,7 +456,7 @@ coef_df %>%
 ```
 
 ## 4.2. Model Comparsion and Evaluation
-Since the outcome of the model is binary, Brier score and area under the curve (AUC) are used to evaluate the models on the test datasets, which represent 30% of the data excluding the training set. AUC can be used to compare their discrimination ability, which is the ability of the model to differentiate between people with and without the outcome. Table 4 displays the summary statistics. The Best Subset model at 36 weeks demonstrated a Brier Score of 0.0835, an AUC of 0.8920, a decision threshold at 0.1600, along with a specificity of 0.8215 and a sensitivity of 0.8638. In comparison, the Best Subset model at 44 weeks showed a slightly higher Brier Score of 0.0963 and a higher AUC of 0.8961, with a notably higher threshold of 0.3015, a greater specificity of 0.9209, but a lower sensitivity of 0.7722. The Lasso model at 36 weeks exhibited a Brier Score of 0.0881, an AUC of 0.8736, a threshold of 0.1621, with specificity and sensitivity closely mirroring those of the Best Subset 36 Weeks model. Lastly, the Lasso model for 44 weeks registered a Brier Score of 0.0923, an AUC of 0.8853, the lowest threshold at 0.1281, a specificity identical to the 36 Weeks Lasso model, and the highest sensitivity of 0.8833 among all models.
+Since the outcome of the model is binary, Brier score and area under the curve (AUC) are used to evaluate the models on the test datasets, which represent 30% of the data excluding the training set. AUC can be used to compare their discrimination ability, which is the ability of the model to differentiate between people with and without the outcome. Table 6 displays the summary statistics. The Best Subset model at 36 weeks demonstrated a Brier Score of 0.0835, an AUC of 0.8920, a decision threshold at 0.1600, along with a specificity of 0.8215 and a sensitivity of 0.8638. In comparison, the Best Subset model at 44 weeks showed a slightly higher Brier Score of 0.0963 and a higher AUC of 0.8961, with a notably higher threshold of 0.3015, a greater specificity of 0.9209, but a lower sensitivity of 0.7722. The Lasso model at 36 weeks exhibited a Brier Score of 0.0881, an AUC of 0.8736, a threshold of 0.1621, with specificity and sensitivity closely mirroring those of the Best Subset 36 Weeks model. Lastly, the Lasso model for 44 weeks registered a Brier Score of 0.0923, an AUC of 0.8853, the lowest threshold at 0.1281, a specificity identical to the 36 Weeks Lasso model, and the highest sensitivity of 0.8833 among all models.
 
 In order to further compare these models in a intuitive way, the calibration and the receiver operating characteristic (ROC) curve are plotted in Figure 1. Calibration assesses the agreement between observed event frequencies and predicted probabilities. It is visualized through a calibration plot, which contrasts the predicted probabilities against observed event rates, illustrating how well the predictions match actual outcomes. It can be seen that the Lasso model at 36 weeks PMA seems to be closest to the 45-degree line, while both models at 44 weeks PMA exhibit some deviations, suggesting less calibration ability.
 

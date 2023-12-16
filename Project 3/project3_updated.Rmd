@@ -1,0 +1,730 @@
+---
+title: "Transportability Analysis of a Cardiovascular Disease Risk Model Developed from the Framingham Heart Study to NHANES"
+subtitle: "Project 3: Simulation Studies [(Github Link)](https://github.com/Rosy98/PHP2550-Project-3)"
+author: "Zihan Zhou"
+date: "`r Sys.Date()`"
+abstract: >
+  \textbf{Aim:} This study aims to assess the transportability of a gender-specific risk score model for cardiovascular diseases (CVD), built using data from the Framingham Heart Study (FHS), to the population underlying the NHANES (National Health and Nutrition Examination Survey) survey data through a simulation study. \par
+  \textbf{Method:} The Brier Score is used to measure predictive accuracy for logistic prediction models for men and women based on Framingham data. These models were then applied to both the NHANES population and a simulated NHANES population based on summary statistics, and assessed by Brier score with adjustment for weights. \par
+  \textbf{Result:} The average Brier scores for FHS are 0.1993 for men and 0.1184 for women. When the model is applied to NHANES, the Brier Scores change to 0.2013 for men and 0.1374 for women. The Brier scores for the simulated NHANES data have a mean of 0.2123 with a standard deviation of 0.0263 for men, and a mean of 0.1278 with a standard deviation of 0.0149 for women.\par
+  \textbf{Conclusions:} The analysis reveals that the model for women achieves a higher Brier Score than the model for men across all three datasets, suggesting that the transportability of the model is better for women than for men. They highlight the challenges in transporting prediction models across diverse populations, emphasizing the impact of varying covariate distributions on model performance. The transportability of the Brier Score is constrained by two identification conditions. Future research could focus on additional performance metrics, such as the AUC, and on developing methods to better address missing data.
+output: 
+  pdf_document
+bibliography: project3.bib
+csl: ieee.csl
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = FALSE, fig.align = "center")
+```
+
+```{r}
+# load library
+library(riskCommunicator)
+library(tidyverse)
+library(tableone)
+library(ggplot2)
+library(ggpubr)
+library(DescTools)
+library(pROC)
+library(mice)
+library(knitr)
+library(kableExtra)
+library(gtsummary)
+library(MASS)
+```
+
+# 1. Introduction
+
+Assessing the performance of prediction models is one of the crucial aspects when developing a model. Usually, the development of prediction models is driven by predictions within a specific target population. In the healthcare system, these prediction models are desired to be deployed to identify individuals at high risk for certain diseases across different populations. The data used to develop the model, referred to as the source study data, often come from randomized trials [@pajouheshniaWhenHowUse2019], large observational databases [@goldsteinOpportunitiesChallengesDeveloping2017], or prospective cohort studies. However, these sources may not represent random samples of the target population, leading to potential disparities in data distribution. This discrepancy makes it difficult to derive the accurate assessment of a model's performance on the target population, as performance metrics derived from the source population may not translate directly to the target population. For instance, the Framingham ATP-III model [@nationalcholesteroleducationprogramncepexpertpanelondetectionevaluationandtreatmentofhighbloodcholesterolinadultsadulttreatmentpaneliiiThirdReportNational2002], designed to predict the 10-year risk of cardiovascular events and primarily developed from data with predominantly white participants, has shown limited generalizability to multi-ethnic populations.
+
+When assessing the performance on external dataset, challenges may arise when only covariate data are available. Due to the differences in data distribution compared to the source data, the outcome data can also have different distribution. For example, the Framingham Heart study [@dagostinoGeneralCardiovascularRisk2008] provides both covariate and outcome data, while the National Health and Nutrition Examination Survey (NHANES) [@NHANESNationalHealth] only has covariate data. This lack of outcome information from the target population limits the ability to develop or assess prediction models using data solely from the target population. In recent years, several methods have been introduced to evaluate prediction model performance in a target population, or to transfer performance measures from the source to the target population.
+
+This project will apply the Brier score as a measure of transportability, a newly developed method that uses covariate and outcome data from the source population to bridge the differences in data distributions between the two populations [@steingrimssonTransportingPredictionModel2023a]. The approach will be applied to two gender-based risk score models for cardiovascular disease (CVD) developed using Framingham Heart Study data. The objective of the study is to estimate the models' performance in a new target population represented by the NHANES survey data. When only summary statistics of the target population are available, simulation studies will be utilized, simulating the population based on the target population's statistics.
+
+# 2. Data
+
+## 2.1 Framingham study
+
+The Framingham Heart Study [@kannelFraminghamStudyEpidemiological1987], conducted in Framingham, Massachusetts, is a long-term prospective investigation into the causes of cardiovascular disease (CVD) among a population of free living subjects. This study in epidemiology was pioneering as it was the first study to prospectively examine cardiovascular disease, introducing the concept of risk factors and their joint effects. The study started in 1948 and a total of 5,209 subjects were initially enrolled in the study. All research participants were constantly monitored for the emergence of CVD events and mortality. CVD is defined by the Framingham study as a composite of CHD (coronary death, myocardial infarction, coronary insufficiency, and angina), cerebrovascular events (including ischemic stroke, hemorrhagic stoke, and transient ischemic attack), peripheral artery disease (intermittent claudication), and heart failure.
+
+Eligible participants included those who attended the 11th biennial check-up of the original cohort between 1968 and 1971 (a period when high-density lipoprotein [HDL] cholesterol measurements were available), or the first (1971-1975) or third (1984-1987) check-ups of the Offspring cohort, were aged between 30 and 74, and did not have CVD [@dagostinoGeneralCardiovascularRisk2008].
+
+## 2.2 NHANES
+
+The National Health and Nutrition Examination Survey (NHANES) [@NHANESNationalHealth] is a significant U.S. program aimed at assessing the health and nutritional status of adults and children. Managed by the National Center for Health Statistics (NCHS) under the CDC, NHANES combines interviews with physical examinations. Initiated in the early 1960s, the program has become a continuous effort since 1999, focusing on various health and nutrition topics. It examines about 5,000 individuals each year from a nationally representative sample, covering 15 counties each year. 
+
+During the home interview, participants answer questions related to their health condition, medical history, and eating patterns, while in the health examination stage, they go thorough medical and dental assessments, accurate physiological measurements, and a range of detailed laboratory examinations, all conducted by trained medical staff. This comprehensive strategy guarantees an in-depth insight into the health profiles of the participants, building a strong foundation for thorough health and nutritional studies.
+
+## 2.3 Summary Statistics
+
+```{r}
+# Load data
+load("framingham_df.Rdata")
+load("df_2017.Rdata")
+```
+```{r}
+# Filter to each sex
+framingham_df_men <- framingham_df %>% filter(SEX == 1)
+framingham_df_women <- framingham_df %>% filter(SEX == 2)
+
+```
+
+```{r}
+df_2017$SYSBP_UT <- ifelse(df_2017$BPMEDS == 0, 
+                                 df_2017$SYSBP, 0)
+df_2017$SYSBP_T <- ifelse(df_2017$BPMEDS == 1, 
+                                df_2017$SYSBP, 0)
+```
+
+
+```{r}
+gt1 <- tbl_summary(framingham_df, include = -c(DIABP), by = SEX, missing = "no",
+                   statistic = list(all_continuous() ~ "{mean} ({sd})"),
+                    digits = all_continuous() ~ 2,
+                   label = list(TOTCHOL ~ "Serum Total Cholesterol (mg/dL)",
+                                SYSBP ~ "Systolic Blood Pressure",
+                                CURSMOKE ~ "Current Cigarette Smoking",
+                                DIABETES ~ "Diabetic",
+                                BPMEDS ~ "Use of Anti-hypertensive Medication",
+                                HDLC ~ "High Density Lipoprotein Cholesterol (mg/dL)",
+                                SYSBP_UT ~ "Systolic Blood Pressure (No BPMEDS)",
+                                SYSBP_T ~ "Systolic Blood Pressure (On BPMEDS)")) %>%
+  add_p() %>%
+  modify_header(label = "SEX") %>%
+  bold_labels()
+```
+
+```{r}
+gt2 <- tbl_summary(df_2017, include = -c(SEQN), by = SEX, missing = "no",
+                   statistic = list(all_continuous() ~ "{mean} ({sd})"),
+                   digits = all_continuous() ~ 2,
+                   label = list(TOTCHOL ~ "Serum Total Cholesterol (mg/dL)",
+                                SYSBP ~ "Systolic Blood Pressure",
+                                CURSMOKE ~ "Current Cigarette Smoking",
+                                DIABETES ~ "Diabetic",
+                                BPMEDS ~ "Use of Anti-hypertensive Medication",
+                                HDLC ~ "High Density Lipoprotein Cholesterol (mg/dL)",
+                                SYSBP_UT ~ "Systolic Blood Pressure (No BPMEDS)",
+                                SYSBP_T ~ "Systolic Blood Pressure (On BPMEDS)")) %>%
+  add_p() %>%
+  modify_header(label = "SEX") %>%
+  bold_labels()
+```
+
+The Framingham and NHANES datasets have been cleaned and transformed to include the same covariates, with the eligibility criteria, particularly the age limitation between 30 to 74 from the Framingham study, applied to the NHANES sample. Both datasets are pre-processed to select covariates commonly used in CVD prediction models.
+
+Table 1 presents a summary of the variables used in this transportability analysis, where eligibility criteria have been applied to the NHANES data, and no other transformations or imputations have been performed. In the Framingham source population, cardiovascular disease (CVD) events were recorded for 33% of men (360) and 17% of women (242); however, this CVD data is not available in the NHANES dataset. This table also highlights the differences in the distribution of risk factors by gender and between the two populations, based on the p-value calculated by Pearson's Chi-squared test and Wilcoxon rank sum test. Compared to NHANES participants (188 mg/dL for men and 196 mg/dL for women), Framingham participants have higher average total cholesterol levels (226 mg/dL for men and 246 mg/dL for women). Framingham study participants also showed a higher rate of current cigarette smoking among both men (39%) and women (31%) compared to NHANES participants (24% for men and 16% for women). Differences in diabetic status and the use of anti-hypertensive medication are observed, with the NHANES population showing higher rates in both categories, but only the difference in diabetic status was statistically significant between genders. The differences in these risk factors by gender shows the necessity to model based on gender while the differences in covariates highlights the challenge when transporting the risk score model from Framingham population to NHANES population.
+
+
+```{r}
+tbl_merge(list(gt1, gt2),
+          tab_spanner = c("Framingham", "NHANES"))%>%
+  as_kable_extra(booktabs = T, escape = F, align = "c", caption = "Summary of the variables used in the transportability analysis of CVD predictio model") %>%
+  kable_styling(latex_options = c("HOLD_position", "scale_down"))
+```
+
+## 2.3 Missing Data
+
+There is a lot of missing data in both datasets. When developing the risk score model based on the Framingham study, only complete records are used. As a result, the challenges of missing data in the Framingham study will not be considered. When transferring the model to NHANES, multiple imputation will be employed. Table 2 presents the percentage of missing data in NHANES after applying the eligibility. Some variables seem to exhibit a similar pattern of missing data. The `HDLC` and `TOTCHOL` variables have identical missing percentages of 10.52%.
+
+```{r}
+# check missing data
+df_2017_miss <- df_2017 %>% dplyr::select(colnames(df_2017[ ,colSums(is.na(df_2017))>0]))
+# calculate the percentage of missing
+df_2017_miss_pct <- data.frame(cbind(Number = colSums(is.na(df_2017_miss)), 
+                                  Pct = paste0(round(100*colSums(is.na(df_2017_miss))/nrow(df_2017_miss), 2), "%"))) 
+
+df_2017_miss_pct <- df_2017_miss_pct %>%
+  arrange(desc(as.numeric(Number)))
+
+
+df_2017_miss_pct$Variable <- rownames(df_2017_miss_pct)
+rownames(df_2017_miss_pct) <- NULL
+df_2017_miss_pct <- df_2017_miss_pct[, c(3,1,2)] # reorder the column
+
+kable(df_2017_miss_pct, booktabs = T, escape = T, 
+      caption = "Summary of Missing Values for NHANES",
+      align = "c") %>%
+  kable_styling(latex_options = c("HOLD_position"))
+```
+
+# 3. Transportability Analysis Methods
+
+## 3.1. Multiple Imputation
+
+Multiple imputation will be used to address the missing data in the NHANES dataset. This method creates several imputed datasets, thus introducing variability in the imputed values to reflect the uncertainty around the true values. The imputation will apply algorithms repetitively to generate values for the missing data. Then each dataset undergoes standard statistical analysis since it is complete. In this project, five complete NHANES datasets will be produced for analysis, the pooled Brier Score will be used.
+
+## 3.2 Models
+
+In this project, two gender-based models developed using the Framingham Dataset for predicting cardiovascular disease (CVD) will be adapted for use with the NHANES population. The NHANES data lacks relevant CVD outcomes with only covariates data. The models will be evaluated on three different datasets: the original Framingham Dataset, the NHANES dataset, and a simulated NHANES dataset. This evaluation aims to assess the transportability of the CVD risk score model. Since CVD is a binary outcome in the model, logistic regression models are used.
+
+For Men: \begin{align*}
+\text{logit}(P(\text{CVD})) = \ & \beta_0 + \beta_1 \log(\text{HDLC}) + \beta_2 \log(\text{TOTCHOL}) \\
+& + \beta_3 \log(\text{AGE}) + \beta_4 \log(\text{SYSBP\_UT} + 1) \\
+& + \beta_5 \log(\text{SYSBP\_T} + 1) + \beta_6 \text{CURSMOKE} + \beta_7 \text{DIABETES}
+\end{align*}
+
+For Women: \begin{align*}
+\text{logit}(P(\text{CVD})) = \ & \gamma_0 + \gamma_1 \log(\text{HDLC}) + \gamma_2 \log(\text{TOTCHOL}) \\
+& + \gamma_3 \log(\text{AGE}) + \gamma_4 \log(\text{SYSBP\_UT} + 1) \\
+& + \gamma_5 \log(\text{SYSBP\_T} + 1) + \gamma_6 \text{CURSMOKE} + \gamma_7 \text{DIABETES}
+\end{align*}
+
+Here, $\text{logit}(P(\text{CVD}))$ represents the log-odds of cardiovascular disease (CVD). HDLC stands for High-Density Lipoprotein Cholesterol (mg/dL), TOTCHOL for Serum Total Cholesterol (mg/dL), and SYSBP for Systolic Blood Pressure, adjusted for the use of anti-hypertensive medication (BOMEDS). CURSMOKE indicates current cigarette smoking status (0 = Not a current smoker, 1 = Current smoker), and DIABETES represents the presence of diabetes based on the criteria of the first exam treated, or a casual glucose level of 200 mg/dL or more (0 = Not diabetic, 1 = Diabetic). The coefficients $\beta_i$ and $\gamma_i$ are for the men's and women's models respectively. The data will be split into 70-30 train-test sets. The model will be trained on the training data and then evaluated on the test data.
+
+## 3.3 Simulation
+
+The simulation study is presented in the ADEMP structure [@morrisUsingSimulationStudies2019].
+
+### Aim
+
+The aim of this simulation study is to assess the transportability of the cardiovascular disease (CVD) event prediction model, originally developed from the Framingham study data, to the NHANES national population. This assessment will be conducted using the Brier score as a measure of predictive accuracy when only summary data from the NHANES are available.
+
+### Data-Generating Mechanism
+
+When simulating the data, we assume that individual level data is not available from the target population NHANES and only summary statistics in Table 1 are available. When adjusting for the distribution of NHANES covariates, covariate data from the source population, Framingham, are used. The Shapiro-Wilk normality test is utilized to determine if simulations using a normal distribution are applicable. The results are consistently much smaller than the significance level of 0.05, leading to the rejection of the normality assumption. Therefore, we consider alternative distributions.
+
+After exploratory analysis, it can be observed that the distribution are right-skewed. In the following plots, the black lines represent the densities of continuous variables of Framingham and the overlay blue lines are for log normal distribution using summary statistics with mean and standard deviation. The plots show that the distributions of the actual data and the simulated data are very close, except for age, which shows a small deviation. The data-generation is done separately for male and female. As a result, log-normal distribution is then used to generate continuous variables in the simulated NHANES dataset based on the summary statistics.
+
+For binary variables, they are also associated to continuous variables, so random samples will be drawn from a multivariate normal distribution for all continuous and binary variables. Then based on the summary statistics for binary variables, the generated continuous value will be converted into binary value based on their quantile. Each simulated dataset contains 1,961 men and 2,099 women. The size of the simulation is $n_{sim} = 1000.$
+
+```{r}
+p1_men <- ggplot(framingham_df_men) + 
+  geom_density(aes(x=log(HDLC))) + 
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(log(framingham_df_men$HDLC), na.rm = TRUE), 
+                            sd =  sd(log(framingham_df_men$HDLC), na.rm = TRUE)), 
+                color = "blue") +
+  ggtitle("Men") +
+  theme(plot.title = element_text(hjust = 0.5, size = 15)) +
+  theme_minimal()
+
+p2_men <- ggplot(framingham_df_men, aes(x=log(TOTCHOL))) + 
+  geom_density() +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(log(framingham_df_men$TOTCHOL), na.rm = TRUE), 
+                            sd =  sd(log(framingham_df_men$TOTCHOL), na.rm = TRUE)), 
+                color = "blue") +
+  ggtitle("Men") +
+  theme_minimal() 
+
+p3_men <- ggplot(framingham_df_men, aes(x=log(AGE))) + 
+  geom_density() +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(log(framingham_df_men$AGE), na.rm = TRUE), 
+                            sd =  sd(log(framingham_df_men$AGE), na.rm = TRUE)), 
+                color = "blue") +
+  theme_minimal() 
+
+p4_men <- ggplot(framingham_df_men, aes(x=log(SYSBP))) + 
+  geom_density() +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(log(framingham_df_men$SYSBP), na.rm = TRUE), 
+                            sd =  sd(log(framingham_df_men$SYSBP), na.rm = TRUE)), 
+                color = "blue") +
+  theme_minimal() 
+
+```
+
+```{r}
+p1_women <- ggplot(framingham_df_women) + 
+  geom_density(aes(x=log(HDLC))) + 
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(log(framingham_df_women$HDLC), na.rm = TRUE), 
+                            sd =  sd(log(framingham_df_women$HDLC), na.rm = TRUE)), 
+                color = "blue") +
+  ggtitle("Women") +
+  theme(plot.title = element_text(hjust = 0.5, size = 15)) +
+  theme_minimal()
+
+p2_women <- ggplot(framingham_df_women, aes(x=log(TOTCHOL))) + 
+  geom_density() +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(log(framingham_df_women$TOTCHOL), na.rm = TRUE), 
+                            sd =  sd(log(framingham_df_women$TOTCHOL), na.rm = TRUE)), 
+                color = "blue") +
+  ggtitle("Women") +
+  theme_minimal() 
+
+p3_women <- ggplot(framingham_df_women, aes(x=log(AGE))) + 
+  geom_density() +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(log(framingham_df_women$AGE), na.rm = TRUE), 
+                            sd =  sd(log(framingham_df_women$AGE), na.rm = TRUE)), 
+                color = "blue") +
+  theme_minimal() 
+
+p4_women <- ggplot(framingham_df_women, aes(x=log(SYSBP))) + 
+  geom_density() +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(log(framingham_df_women$SYSBP), na.rm = TRUE), 
+                            sd =  sd(log(framingham_df_women$SYSBP), na.rm = TRUE)), 
+                color = "blue") +
+  theme_minimal() 
+
+```
+
+```{r, fig.width=16, fig.height=10}
+plots <- ggarrange(
+  p1_men, p1_women,
+  p2_men, p2_women,
+  p3_men, p3_women,
+  p4_men, p4_women,
+  ncol = 4, nrow = 2)
+
+annotate_figure(plots, top = text_grob("Figure 1: Densities of actual Framingham study and simulated using Log-normal distribution",  face = "bold", size = 15))
+```
+
+### Estimands
+
+The estimands used in this simulation study is the Brier Scores in the source population and target population (which is equivalent to the MSE for binary outcomes). In the source population, the Brier Score can be calculated using the mean squared error (MSE) $(Y-g(X))^2$, which quantifies the discrepancy between the observed outcome $Y$ and the model $\text{Pr[Y=1|X, D=0]}$ derived prediction $g(X)$, where X is the covaraites.
+
+In target population, the outcome variable is missing, which presents a challenge for calculations. Let S be an indicator for the population from which data are obtained, with S = 1 representing the source population Framingham and S = 0 representing the target population NHANES. The term $n = n_{source} + n_{target}$ is used to denote the total number of observations in the composite dataset, which consists of the data from both the source and target poopulation. Then the dataset is divided into a training set and a test set. Let D be an indicator distinguishing between the training and test data within the population. Therefore, the Brier Score for the target population is [@steingrimssonTransportingPredictionModel2023a]:
+
+$$\hat{\psi}_{\hat{\beta}} = \frac{\sum_{i=1}^{n} I(S_{i} = 1, D_{\text{test}, i} = 1)\hat{o}(X_{i})(Y_{i} - g_{\hat{\beta}}(X_{i}))^2}{\sum_{i=1}^{n} I(S_{i} = 0, D_{\text{test}, i} = 1)}$$
+
+where $\hat{o}(X)$ is an estimator for the inverse-odds weights in the test set, $$\frac{\text{Pr}[S=0|X, D_{test}=1]}{\text{Pr}[S=1|X,D_{test}=1]}.$$
+
+The weights $\hat{o}(X)$ can be obtained by fitting a logistic regression model for the odds of the participants from the source population conditional on covariates $\text{Pr}[S=1|X,D_{test} =1]$.
+
+### Methods
+
+Two logistic regression models presented in section 3.2 for male and female are fitted to predict CVD. Continuous variables are log-transformed. These models are developed on the training dataset and then evaluated on the test dataset.
+
+### Performance Measures
+
+The transportable ability is assessed by comparing the estimated Brier scores between the source population Framingham study, the NHANES population and the simulated NHANES population.
+
+# 4. Results
+
+```{r}
+
+############################################
+######## Brier Score for Framingham ########
+############################################
+
+# Test-train split
+set.seed(1)
+sample_men <- sample(c(TRUE, FALSE), nrow(framingham_df_men), replace=TRUE, prob=c(0.7,0.3))
+sample_women <- sample(c(TRUE, FALSE), nrow(framingham_df_women), replace=TRUE, prob=c(0.7,0.3))
+
+train_framingham_men  <- framingham_df_men[sample_men, ]
+test_framingham_men   <- framingham_df_men[!sample_men, ]
+
+train_framingham_women  <- framingham_df_women[sample_women, ]
+test_framingham_women   <- framingham_df_women[!sample_women, ]
+```
+
+```{r}
+# Fit models with log transforms for all continuous variables
+mod_men_train <- glm(CVD~log(HDLC)+log(TOTCHOL)+log(AGE)+log(SYSBP_UT+1)+
+                 log(SYSBP_T+1)+CURSMOKE+DIABETES, 
+      data= train_framingham_men, family= "binomial")
+
+
+mod_women_train <- glm(CVD~log(HDLC)+log(TOTCHOL)+log(AGE)+log(SYSBP_UT+1)+
+                   log(SYSBP_T+1)+CURSMOKE+DIABETES, 
+               data= train_framingham_women, family= "binomial")
+```
+
+```{r}
+# Brier score
+library(DescTools)
+pred_test_men <- predict(mod_men_train, test_framingham_men[, -1], type = "response")
+pred_test_women <- predict(mod_women_train, test_framingham_women[, -1], type = "response")
+bs_fram_men <- mean((pred_test_men-test_framingham_men$CVD)^2)
+bs_fram_women <- mean((pred_test_women-test_framingham_women$CVD)^2)
+```
+
+```{r}
+
+############################################
+########## Brier Score for NHANES ##########
+############################################
+
+# multiple imputation
+library(mice)
+# Check missing values and impute using mice package
+df_2017 <- df_2017[, -c(11, 12)]
+set.seed(1)
+df_2017_mice_out <- mice(df_2017, 5, pri=F)
+
+# Store each imputed data set
+df_2017_imp <- vector("list",5)    
+for (i in 1:5){
+  df_2017_imp[[i]] <- mice::complete(df_2017_mice_out ,i) 
+}
+
+```
+```{r}
+# Get blood pressure based on whether or not on BPMEDS
+for (i in 1:5){
+  df_2017_imp[[i]]$SYSBP_UT <- ifelse(df_2017_imp[[i]]$BPMEDS == 0, 
+                                 df_2017_imp[[i]]$SYSBP, 0)
+  df_2017_imp[[i]]$SYSBP_T <- ifelse(df_2017_imp[[i]]$BPMEDS == 1, 
+                                df_2017_imp[[i]]$SYSBP, 0)
+}
+```
+
+```{r}
+# Applying the eligibility criteria of Framingham on NHANES
+for (i in 1:5){
+  df_2017_imp[[i]] <- df_2017_imp[[i]] %>% filter(AGE <= 74 & AGE >= 30) %>% mutate(S = 0, D = 1) 
+}
+```
+
+
+```{r}
+framingham_df_men <- framingham_df_men %>% 
+  mutate(S = 1) %>% 
+  dplyr::select(CVD, SEX, TOTCHOL, AGE, SYSBP, CURSMOKE, DIABETES, BPMEDS, HDLC, BMI, SYSBP_UT, SYSBP_T, S)
+
+set.seed(1)
+framingham_df_men$D <- sample(c(1, 0), nrow(framingham_df_men), replace=TRUE, prob=c(0.3,0.7))
+
+
+framingham_df_women <- framingham_df_women %>% 
+  mutate(S = 1) %>% 
+  dplyr::select(CVD, SEX, TOTCHOL, AGE, SYSBP, CURSMOKE, DIABETES, BPMEDS, HDLC, BMI, SYSBP_UT, SYSBP_T, S)
+
+set.seed(1)
+framingham_df_women$D <- sample(c(1, 0), nrow(framingham_df_women), replace=TRUE, prob=c(0.3,0.7))
+```
+
+```{r}
+# Split by gender
+df_2017_imp_men <- vector("list", length = 5)
+df_2017_imp_women <- vector("list", length = 5)
+
+for (i in 1:5){
+  df_2017_imp_men[[i]] <- df_2017_imp[[i]] %>% filter(SEX == 1)
+  df_2017_imp_women[[i]] <- df_2017_imp[[i]] %>% filter(SEX == 2)
+}
+
+```
+
+```{r}
+# Create composite datasets
+composite_imp_men <- vector("list", length = 5)
+composite_imp_women <- vector("list", length = 5)
+
+for (i in 1:5){
+  composite_imp_men[[i]] <- merge(df_2017_imp_men[[i]], framingham_df_men, all = TRUE)
+  composite_imp_women[[i]] <- merge(df_2017_imp_women[[i]], framingham_df_women, all = TRUE)
+}
+```
+
+```{r}
+mod_men_train_list <- vector("list", length = 5)
+mod_women_train_list <- vector("list", length = 5)
+
+for(i in 1:5){
+  # Fit models on training set
+  mod_men_train_list[[i]] <- glm(CVD~log(HDLC)+log(TOTCHOL)+log(AGE)+log(SYSBP_UT+1)+
+                 log(SYSBP_T+1)+CURSMOKE+DIABETES, 
+      data= composite_imp_men[[i]][composite_imp_men[[i]]$S==1 &composite_imp_men[[i]]$D==0, ],
+      family= "binomial")
+  
+  mod_women_train_list[[i]] <- glm(CVD~log(HDLC)+log(TOTCHOL)+log(AGE)+log(SYSBP_UT+1)+
+                   log(SYSBP_T+1)+CURSMOKE+DIABETES, 
+               data= composite_imp_women[[i]][composite_imp_women[[i]]$S==1 &composite_imp_women[[i]]$D==0, ],
+               family= "binomial")
+  
+  # Predict on test set
+  composite_imp_men[[i]]$prediction[composite_imp_men[[i]]$S==1 &composite_imp_men[[i]]$D==1] <- 
+    predict(mod_men_train_list[[i]], 
+            composite_imp_men[[i]][composite_imp_men[[i]]$S==1 &composite_imp_men[[i]]$D==1, ],
+            type = "response")
+  
+  composite_imp_women[[i]]$prediction[composite_imp_women[[i]]$S==1 &composite_imp_women[[i]]$D==1] <-
+    predict(mod_women_train_list[[i]], 
+            composite_imp_women[[i]][composite_imp_women[[i]]$S==1 &composite_imp_women[[i]]$D==1, ],
+            type = "response")
+}
+
+```
+
+```{r}
+trans_brier <- function(df){
+  #' Calculate the Brier Score for transporting a prediction model for a new target population
+  #'
+  #' @param df The composite dataframe of Framingham study and NHANES
+  #' @return A numeric number of the transportation Brier Score.
+  
+  model_S <- glm(S ~ log(HDLC)+log(TOTCHOL)+log(AGE)+log(SYSBP_UT+1)+
+                   log(SYSBP_T+1)+CURSMOKE+DIABETES, data = df[df$D == 1, ], family = "binomial")
+  df$sigma_hat[df$D==1] <- 1/predict(model_S, type = "response")
+  
+  df_sub <- df[df$S == 1 & df$D == 1, ]
+  
+  sum(df_sub$sigma_hat * (df_sub$CVD - df_sub$prediction)^2)/sum(df$S == 0 & df$D == 1)
+}
+```
+
+```{r, results='hide'}
+# Test trains_brier function
+trans_brier(composite_imp_men[[1]])
+trans_brier(composite_imp_women[[1]])
+```
+```{r}
+brier_imp_men <- numeric(length = 5)
+brier_imp_women <- numeric(length = 5)
+
+for(i in 1:5){
+  brier_imp_men[i] <- trans_brier(composite_imp_men[[i]])
+  brier_imp_women[i] <- trans_brier(composite_imp_women[[i]])
+}
+
+bs_imp_men <- mean(brier_imp_men)
+bs_imp_women <- mean(brier_imp_women)
+
+sd_imp_men <- sd(brier_imp_men)
+sd_imp_women <- sd(brier_imp_women)
+```
+
+```{r}
+##################################################
+######## Brier Score for simulated NHANES ########
+##################################################
+framingham_sub <- framingham_df %>%
+  mutate(log_TOTCHOL=log(TOTCHOL),
+         log_SYSBP=log(SYSBP),
+         log_HDLC=log(HDLC),
+         log_AGE=log(AGE)) %>%
+  dplyr::select(SEX,CURSMOKE,DIABETES,BPMEDS,log_TOTCHOL,log_SYSBP,log_HDLC,log_AGE)
+
+cov_men <- framingham_sub %>%
+  filter(SEX==1) %>%
+  dplyr::select(-SEX) %>%
+  cov()
+
+cov_women <- framingham_sub %>%
+  filter(SEX==2) %>%
+  dplyr::select(-SEX) %>%
+  cov()
+
+df_2017_sub <- df_2017 %>%
+  dplyr::select(SEX,CURSMOKE,DIABETES,BPMEDS,TOTCHOL,SYSBP,HDLC,AGE)
+
+mean_values <- df_2017_sub %>%
+  group_by(SEX) %>%
+  summarise(
+    CURSMOKE = mean(CURSMOKE, na.rm = TRUE),
+    DIABETES = mean(DIABETES, na.rm = TRUE),
+    BPMEDS = mean(BPMEDS, na.rm = TRUE),
+    TOTCHOL = mean(log(TOTCHOL), na.rm = TRUE),
+    SYSBP = mean(log(SYSBP), na.rm = TRUE),
+    HDLC = mean(log(HDLC), na.rm = TRUE),
+    AGE = mean(log(AGE), na.rm = TRUE)
+  )
+
+mean_men <- unlist(as.vector(mean_values[1, -1]))
+mean_women <- unlist(as.vector(mean_values[2, -1]))
+```
+
+```{r, eval=FALSE}
+test <- data.frame(mvrnorm(n = 100, mean_men, Sigma=cov_men))
+```
+
+```{r}
+# Data simulating function
+simulate_data <- function() {
+
+  # Continuous variables
+  men_df <- data.frame(mvrnorm(n = 1961, mean_men, Sigma=cov_men))
+  women_df <- data.frame(mvrnorm(n = 2099, mean_women, Sigma=cov_women))
+  
+  # Binary variables
+  men_df <- men_df %>%
+    mutate(CURSMOKE=ifelse(CURSMOKE>quantile(men_df$CURSMOKE, 0.24),0,1),
+           DIABETES=ifelse(DIABETES>quantile(men_df$DIABETES,0.18),0,1),
+           BPMEDS=ifelse(BPMEDS>quantile(men_df$BPMEDS,0.33),0,1))
+  women_df <- women_df %>%
+    mutate(CURSMOKE=ifelse(CURSMOKE>quantile(women_df$CURSMOKE, 0.16),0,1),
+           DIABETES=ifelse(DIABETES>quantile(women_df$DIABETES,0.15),0,1),
+           BPMEDS=ifelse(BPMEDS>quantile(women_df$BPMEDS,0.32),0,1))
+
+  # Combine into dataframes
+  men_df$S <- rep(0, 1961)
+  men_df$SEX <- rep(1, 1961)
+  women_df$S <- rep(0, 2099) 
+  women_df$SEX <- rep(2, 2099)
+  
+
+  # Combine men and women dataframes
+  df <- rbind(men_df, women_df)
+  df$HDLC <- exp(df$HDLC)
+  df$TOTCHOL <- exp(df$TOTCHOL)
+  df$SYSBP <- exp(df$SYSBP)
+  df$AGE <- exp(df$AGE)
+  df$SYSBP_UT <- ifelse(df$BPMEDS == 0, 
+                                 df$SYSBP, 0)
+  df$SYSBP_T <- ifelse(df$BPMEDS == 1, 
+                                df$SYSBP, 0)
+
+  return(df)
+}
+
+```
+
+```{r}
+simu_brier_func <- function(){
+  # Call the function to get the simulated data
+  simulated_data_df <- simulate_data()
+  
+  simulated_data_df_men <- simulated_data_df %>% 
+    filter(SEX == 1, AGE <= 74 & AGE >= 30) %>% 
+    mutate(D = 1)
+  simulated_data_df_women <- simulated_data_df %>% 
+    filter(SEX == 2, AGE <= 74 & AGE >= 30) %>% 
+    mutate(D = 1)
+  
+  composite_sim_men <- merge(simulated_data_df_men, framingham_df_men, all = TRUE)
+  composite_sim_women <- merge(simulated_data_df_women , framingham_df_women, all = TRUE)
+  
+  mod_men_sim_train <- glm(CVD~log(HDLC)+log(TOTCHOL)+log(AGE)+log(SYSBP_UT+1)+
+                 log(SYSBP_T+1)+CURSMOKE+DIABETES, 
+      data= composite_sim_men[composite_sim_men$S==1 &composite_sim_men$D==0, ],
+      family= "binomial")
+  
+  mod_women_sim_train <- glm(CVD~log(HDLC)+log(TOTCHOL)+log(AGE)+log(SYSBP_UT+1)+
+                   log(SYSBP_T+1)+CURSMOKE+DIABETES, 
+               data= composite_sim_women[composite_sim_women$S==1 &composite_sim_women$D==0, ],
+               family= "binomial")
+  
+  # Predict on test set
+  composite_sim_men$prediction[composite_sim_men$S==1 & composite_sim_men$D==1] <- 
+    predict(mod_men_sim_train, 
+            composite_sim_men[composite_sim_men$S==1 & composite_sim_men$D==1, ],
+            type = "response")
+  
+  composite_sim_women$prediction[composite_sim_women$S==1 & composite_sim_women$D==1] <-
+    predict(mod_women_sim_train, 
+            composite_sim_women[composite_sim_women$S==1 & composite_sim_women$D==1, ],
+            type = "response")
+  
+  return(c(trans_brier(composite_sim_men), trans_brier(composite_sim_women)))
+}
+
+```
+
+```{r, results='hide'}
+# Test simu_brier_func()
+simu_brier_func()
+```
+
+```{r, eval=FALSE}
+# Initialize vectors to store Brier scores
+brier_scores <- matrix(nrow = 1000, ncol = 2)
+
+# Perform 1000 simulations
+set.seed(1)
+for(i in 1:1000) {
+  brier_scores[i, ] <- simu_brier_func()
+}
+```
+
+```{r, eval=FALSE}
+colnames(brier_scores) <- c("men", "women")
+save(brier_scores, file = "brier_scores.RData")
+```
+
+
+```{r}
+# Restore the object
+load("brier_scores.RData")
+```
+
+```{r}
+# Calculate mean Brier scores at each simulation step
+mean_brier_men <- cumsum(brier_scores[,1]) / 1:1000
+mean_brier_women <- cumsum(brier_scores[,2]) / 1:1000
+sd_brier_men <- sd(brier_scores[, 1])
+sd_brier_women <- sd(brier_scores[, 2])
+```
+
+```{r}
+brier_df <- data.frame(Estimate = c("Mean", "SD", "Mean", "SD"),
+                       Framingham = round(c(bs_fram_men, NA, bs_fram_women, NA), 4),
+                       NHANES = round(c(bs_imp_men, sd_imp_men, bs_imp_women, sd_imp_women), 4),
+                       Sim_NHANES = round(c(mean_brier_men[1000], sd_brier_men, 
+                                      mean_brier_women[1000], sd_brier_women), 4))
+
+rownames(brier_df) <- c("Men", "", "Women", " ")
+colnames(brier_df) <- c("Statistics", "Framingham", "NHANES", "Simulated NHANES (n = 1000)")
+```
+
+Table 3 summarizes the Brier Scores for the cardiovascular disease (CVD) risk prediction model across three datasets: Framingham, NHANES, and Simulated NHANES. It is observed that for both genders, the Brier Scores and their standard deviations are consistently higher in men than in women.
+
+A lower Brier Score suggests a better accuracy of the model. For the Framingham dataset, the Brier Scores were 0.1917 for men and 0.1176 for women, suggesting more precise predictions for women. 
+
+When transporting this model to the NHANES data, there was an increase in Brier Scores, indicating less accuracy compared to the original Framingham data. The average Brier Score for men across the five imputation dataset is 0.2013 while for women is was 0.1374. The model for women still performs better than men. The standard deviation of Brier scores for women is smaller than men, suggesting more stable predictions. 
+
+Simulations based on summary statistics yielded the smallest Brier Scores among the datasets, with the mean Brier Score for the 1000 simulated datasets being 0.2105 for men and 0.1284 for women, suggesting better performance of model for women on the simulated data. The standard deviation for women remained smaller than for men. These results indicate that the model’s transportability for women is potentially better than for men in our studies.
+```{r}
+brier_df[is.na(brier_df)] <- "-"
+brier_df %>% kable(booktabs = T, escape = F, align = "c", caption = "Summary of the Brier Scores") %>%
+  kable_styling(latex_options = c("HOLD_position"))
+```
+
+Figure 2 further illustrates the results of the simulation study, plotting the changes in Brier Scores against the number of simulations for both men and women. It shows the variability and convergence of the mean Brier Score as the number of simulations increases. The figure on the left for men, displays initial fluctuations. However, as the number of simulations is over 300, the mean Brier Score stabilizes and converges to a value around 0.2123. The figure on the right for women, also demonstrates initial variability, but the mean Brier Score stabilizes and converges more quickly than men, eventually reaching a value around 0.1278. It indicates a more consistent prediction model for women compared to men, aligning with our results in Table 3 regarding the standard deviation.
+```{r}
+plot_data_men <- data.frame(
+  Simulation = 1:1000,
+  MeanBrier = mean_brier_men
+)
+
+plot_data_women <- data.frame(
+  Simulation = 1:1000,
+  MeanBrier = mean_brier_women
+)
+
+# Adjustments for font sizes
+title_size <- 30
+axis_text_size <- 25
+axis_title_size <- 28
+
+# Plotting for men
+p1_sim_men <- ggplot(plot_data_men, aes(x = Simulation, y = MeanBrier)) +
+  geom_line(color = "blue", linewidth = 0.8) +
+  labs(title = "Men", x = "Number of Simulations", y = "Mean Brier Score") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = title_size),
+    axis.text = element_text(size = axis_text_size),
+    axis.title = element_text(size = axis_title_size)
+  )
+
+# Plotting for women
+p2_sim_women <- ggplot(plot_data_women, aes(x = Simulation, y = MeanBrier)) +
+  geom_line(color = "red", linewidth = 0.8) +
+  labs(title = "Women", x = "Number of Simulations", y = "Mean Brier Score") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = title_size),
+    axis.text = element_text(size = axis_text_size),
+    axis.title = element_text(size = axis_title_size)
+  )
+```
+
+
+```{r, fig.width = 16, fig.height = 8}
+simu_plot <- ggarrange(p1_sim_men, p2_sim_women)
+annotate_figure(simu_plot, top = text_grob("Figure 2: Changes of Mean Brier Score with the Number of Simulation",  face = "bold", size = 30))
+```
+
+# 5. Discussion
+
+In this project, the Brier Score is used to estimate the transferability of CVD prediction models to a target population during model development when outcome and covariate data are available from the source population, and only covariate data are available from the target population. Two logistic models for men and women have been developed using population data from the Framingham study. The model performance is estimated without specifying the model in the NHANES population. The formula for transportability analysis takes into account both the source and target populations.
+
+Our results indicate that across all three datasets, the model consistently performs better for women than for men, suggesting underlying differences in CVD risk-related covariates. The model for women demonstrates a higher capacity for application across various female populations.
+
+When comparing the results across the datasets, it shows that the Brier Score of model for men on the simulated NHANES population are the highest, while for women on the NHANES population are the highest. The model performs better on Framingham data than on NHANES data because it is developed based on the former, and the covariates of the NHANES data are significantly different from those of the Framingham data. The model can represent the Framingham data more accurately than the NHANES data since the measures of model performance are essentially an average of the covariate distribution. Therefore, when the distributions of the covaraites are different, the predictions will deviate. 
+
+The simulated data performs best for women might be due to that the simulated data is not able capture the full complexity of the real-world data. In our simulations, only log-normal distributions are used. Although the density plots for most covariates are close, age shows a deviation, and the log-normal distribution has fewer outliers compared to real-world data. Moreover, since we assume we do not have the individual data of NHANES when simulating, we can only refer to the distribution from the Framingham study. However, the actual distribution in NHANES may not follow the covariate distributions observed in Framingham.
+
+There are also some limitations to our project. Firstly,  the implemented Brier Score for transportability relies on two identifiable conditions, A1 and A2 [@steingrimssonTransportingPredictionModel2023a]: A1 needs the independence of the outcome Y and the population S given the covariates, and A2 is positivity, suggesting $\text{Pr}[S=1|X=x]>0$ for every $x$ where the joint density of $f(X=x, S = 0) \neq 0$. These conditions might not be satisfied in other datasets, which limits the usage of this metric. Future studies could consider additional performance measures, such as AUC (Area Under the ROC Curve), for a more comprehensive assessment of the model. Moreover, alternative distributions and methods could be explored for simulation purposes. The issue of missing data in the Framingham population has not been considered in our projct, thus new transportability analysis tools could also be developed to address this problem.
+
+# References

@@ -1,0 +1,646 @@
+---
+title: "Impact of Maternal Smoking on Adolescent Behavioral and Self-Regulation Outcomes"
+subtitle: "Project 1: Explortory Data Analysis [(Github Link)](https://github.com/Rosy98/PHP2550-Project-1)"
+author: "Zihan Zhou"
+date: "`r Sys.Date()`"
+output: pdf_document
+abstract: "This study investigates the effects of maternal smoking during pregnancy (SDP) and environmental tobacco smoke (ETS) exposure on adolescent self-regulation and behavioral outcomes. We analyzed data from 49 mother-child pairs, evaluating 79 variables related to demographics, smoke exposure, and behavioral assessments. The analysis indicates a correlation between increased SDP/ETS and self-regulation issues, substance use, and externalizing behaviors among adolescents. These associations suggest potential long-term impacts of prenatal and postnatal smoke exposure on child development. The findings, limited by the study's sample size and self-reported data, underline the necessity for future research to confirm these trends."
+  
+bibliography: Project1.bib
+---
+ 
+```{r setup, include=FALSE}
+# Load library
+library(knitr)
+library(tidyr)
+library(formatR)
+library(kableExtra)
+library(tidyverse)
+library(gridExtra)
+library(gtsummary)
+library(gt)
+library(mice)
+library(reshape2)
+opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = FALSE, fig.align = "center")
+```
+
+# 1. Introduction
+
+Exposure to smoking during pregnancy (SDP) and environmental tobacco smoke (ETS) are two of the major public health concerns. These exposures are associated with an increased risk of externalizing behaviors, such as Attention-Deficit/Hyperactivity Disorder, rates of substance use problems and self-regulation problems, which involve maintaining physiological, emotional, behavioral, and cognitive control. The original study [@risicaTailoredVideoIntervention2017] evaluated the efficacy of a tailored video intervention versus usual care of reducing ETS exposure among 738 pregnant individuals, who are either smokers or non-smokers. Eligible participants were women who joined the study early during their pregnancy. They were required to be fluent in English, at least 18 years of age, and exposed to cigarette smoke, either as current smokers, those who had quit smoking independently, or those exposed to secondhand smoke. Additionally, they needed to be expecting a single child and have access to both a telephone and a video player. These women were then randomly assigned to either the experimental group or the control group. Newsletters and videos focused on smoking cessation were assigned to intervention participants, while content focusing on general healthy pregnancy topics were assigned to comparison participants. Based on this study, Dr. Micalizzi re-recruited around 100 mothers and children from the original study and collected data. The purpose of this EDA (Exploratory Data Analysis) is to investigate the effects of SDP/ETS on adolescent self-regulation, substance use, and externalizing behaviors. 
+
+The data used in this EDA comes from both the original and current studies. It includes baseline data along with two longitudinal follow-up assessments scheduled for 6 and 12 months post-baseline. The dataset contains 49 observations, representing 49 mothers and their 49 children. There are a total of 79 variables, including demographic characteristics for both mothers and children, smoke exposure information, computerized self-regulatory assessments, self-reported substance use, and self-regulation based on both parent-reported and child-reported behaviors.
+
+```{r}
+# Load data
+data <- read.csv("project1.csv")
+```
+
+```{r, results='hide'}
+# check data type
+x <- sapply(data, class)
+table(x)
+
+data[data$income == "250, 000",]$income <- 250000
+data$income <- as.numeric(data$income)
+# turn 1=Yes into 1, 2=No into 0
+data[data == "2=No"] <- 0
+data[data == "1=Yes"] <- 1
+data[data == ""] <- NA
+
+data[data == "2 black and miles a day"] <- 2
+data[!is.na(data$mom_numcig)&data$mom_numcig == "44989", ]$mom_numcig <- NA
+data[data == "20-25"] <- 22.5
+data[data == "None"] <- NA
+
+####### check missing data ######
+sum(colSums(is.na(data)) >0)
+```
+
+```{r, eval=FALSE}
+# check the data in general
+data[, -1] %>%
+  tbl_summary()
+```
+
+# 2. Data
+
+## 2.1. Data Type and Recording
+
+Before further investigating the data, it is important to conduct a data quality check. Firstly, I checked the data type of each variable. There are 9 character variables, 54 integer variables, and 15 numeric variables. However, according to the codebook of the data, some variables have incorrect types. For instance, among the demographic variables, 'sex' (where 0 = Male, 1 = Female, 2 = Intersex) should be categorical (character in R) instead of numeric. The 'income' variable, which should be a continuous numeric variable, is coded as a character type. Other variables like smoke exposure and substance use, which use numbers to represent different responses (1 = Yes, 2 = No), should also be categorized as categorical rather than numeric.
+
+In addition, there are some data recording discrepancies. For 'income', one entry is recorded as the character string '250, 000' instead of the numeric value 250000, leading to the incorrect data type mentioned earlier. In the 'mom_numcig' variable, which logs the number of cigarettes a mother consumes daily, there are two strange records: "2 black and miles a day" and "44989". The former value likely should be recorded as '2', while the latter is obviously an outlier by common knowledge; I converted it to NA. Another entry in the same variable shows a range "20-25" instead of a exact number. I imputed this as the mean, 22.5, for convenience in subsequent analysis. Furthermore, there are some blank entries and the character string "none" in the data frame and all such entries should be converted to NAs. It's also worth noting the inconsistency in response recording between the two studies. In the original study, a response was captured with 1 for 'Yes' and 2 for 'No', whereas in the current study, 0 represents 'No' and 1 represents 'Yes'. To maintain consistency, I converted all responses from the original study to the 0 and 1 format to match the current study.
+
+## 2.2. Missing Data
+
+One of the most common issue in data analysis is missing values. In our dataset, 63 out of the total 79 variables have missing values, thus making it essential to find out the missing pattern. The extend of missingness varies significantly across variables. Variables related to the mother's smoking status during pregnancy, such as 'mom_smoke_16wk', have around 18.37% missing data. Demographic details about mother, such as 'page', 'psex' and 'pedu', collectively show a missingness rate of approximately 16.33%. Variable representing the number of days a child smoked in the past 30 days ('num_cigs_30') has the highest missingness at 97.96%. Following are variables related to e-cigarette usage and marijuana consumption in the past 30 days, 'num_e_cigs_30' and 'num_mj_30', having missing data of 95.92% and 93.88% respectively. This kind of high missingness is due to that these questions are posed only if the participant has previously reported substance use. Variable indicating self-reported smoking status at 16 weeks into the pregnancy (mom_smoke_16wk) has the least missingness at only 2.04%. Moreover, some variables are missing together such as the mother's demographic information like 'page' and 'employ', substance use and exposure variables like 'nidaalc' and 'nidatob', smoke exposure data for the third and fourth years ('smoke_exposure_3yr' and 'smoke_exposure_4yr'), and children's demographic details, substance use indicators, and brief problem monitor responses, such as 'tage', 'cig_ever', and 'bpm_att'. Such patterns of missingness could result from participants' personal preferences or the study design.
+
+```{r}
+data_miss <- data %>% select(colnames(data[,colSums(is.na(data))>0]))
+# calculate the percentage of missing
+data_miss_pct <- data.frame(cbind(Number = colSums(is.na(data_miss)), 
+                                  Pct = paste0(round(100*colSums(is.na(data_miss))/nrow(data_miss), 2), "%"))) %>%
+  arrange(desc(Pct))
+data_miss_pct$Variable <- rownames(data_miss_pct)
+rownames(data_miss_pct) <- NULL
+data_miss_pct <- data_miss_pct[, c(3,1,2)] # reorder the column
+
+# create table for summary of missing values
+n <- nrow(data_miss_pct)
+third <- n %/% 3
+
+# Splitting the data frame into 3 parts
+df1 <- data_miss_pct[1:third,]
+df2 <- data_miss_pct[(third+1):(2*third),]
+rownames(df2) <- NULL
+df3 <- data_miss_pct[(2*third+1):n,]
+rownames(df3) <- NULL
+```
+
+```{r}
+kable(cbind(df1, df2, df3), booktabs = T, escape = T, 
+      caption = "Summary of Missing Values",
+      align = "c") %>%
+  kable_styling(latex_options = c("HOLD_position", "scale_down"))
+```
+```{r,fig.height=10}
+# mice::md.pattern(data[,-1], rotate.names = T)
+```
+
+## 2.3. Demographic Characteristics
+
+```{r}
+###### Demographic overview ######
+data_demo <- data %>%
+  mutate(
+    pethnic = case_when(pethnic == 1 ~ "No",
+                        pethnic == 1 ~ "Yes",
+                        is.na(pethnic)|pethnic == 2 ~ NA ),
+    prace =  case_when(
+      paian == 1 ~ "American Indian/Alaska Native",
+      pasian == 1 ~ "Asian",
+      pnhpi == 1 ~ "Native Hawaiian/Pacific Islander",
+      pblack  == 1 ~ "Black/African American",
+      pwhite == 1 ~ "White",
+      prace_other == 1 ~ "Other",
+    ),
+    tethnic = case_when(tethnic == 1 ~ "No",
+                        tethnic == 1 ~ "Yes",
+                        is.na(tethnic)|tethnic == 2 ~ NA ),
+    trace = case_when(
+      taian == 1 ~ "American Indian/Alaska Native",
+      tasian == 1 ~ "Asian",
+      tnhpi == 1 ~ "Native Hawaiian/Pacific Islander",
+      tblack  == 1 ~ "Black/African American",
+      twhite == 1 ~ "White",
+      trace_other == 1 ~ "Other"     
+    )
+  ) %>%
+  select(parent_id, page, psex, plang, pethnic, prace, employ, pedu, income, tage, tsex, language, tethnic, trace)
+```
+
+```{r}
+# convert data type
+data_demo$page <- as.numeric(data_demo$page)
+data_demo$tage <- as.numeric(data_demo$tage)
+
+
+# reordering levels
+data_demo$prace <- factor(data_demo$prace, levels = c("American Indian/Alaska Native", "Asian", "Native Hawaiian/Pacific Islander", "Black/African American", "White", "Other"))
+data_demo$trace <- factor(data_demo$trace, levels = c("American Indian/Alaska Native", "Asian", "Native Hawaiian/Pacific Islander", "Black/African American", "White", "Other"))
+
+# change labels
+data_demo <- data_demo %>%
+  mutate(
+    psex = factor(psex, levels = c(0, 1), labels = c("Male", "Female")),
+    tsex = factor(tsex, levels = c(0, 1), labels = c("Male", "Female")),
+    plang = factor(plang, levels = c(0, 1), labels = c("No", "Yes")),
+    language = factor(language, levels = c(0, 1), labels = c("No", "Yes")),
+    employ = factor(employ, levels = c(0, 1, 2), labels = c("No", "Part-Time", "Full-Time")),
+    pedu = factor(pedu, levels = c(0, 1, 2, 3, 4, 5, 6), labels = c("Some high school", "High school", "GED", "Some college", "2-year degree", "4-year degree", "Postgraduate degree"))
+  )
+```
+
+```{r}
+# parent
+Demo_p <- data_demo[, c("page", "psex", "plang", "pethnic", "prace", "employ", "pedu", "income")] 
+
+colnames(Demo_p) <- c("age", "sex", "lang", "ethnic", "race", "employ", "edu", "income")
+
+t1 <- Demo_p %>%
+  tbl_summary(label = list(age ~ "Age",
+                           sex ~ "Sex",
+                           lang ~ "Language Spoken at Home",
+                           ethnic ~ "Ethnicity",
+                           race ~ "Race",
+                           employ ~ "Employ",
+                           edu ~ "Education",
+                           income ~ "Income"))
+# child
+data_demo$temploy <- NA
+data_demo$tpedu <- NA
+data_demo$tincome <- NA
+Demo_t <- data_demo[, c("tage", "tsex", "language", "tethnic", "trace", "temploy", "tpedu", "tincome")] 
+
+colnames(Demo_t) <- c("age", "sex", "lang", "ethnic", "race", "employ", "edu", "income")
+
+t2<- Demo_t %>%tbl_summary(type = list(age ~ "continuous"),
+              label = list(age ~ "Age",
+                           sex ~ "Sex",
+                           lang ~ "Language Spoken at Home",
+                           ethnic ~ "Ethnicity",
+                           race ~ "Race",
+                           employ ~ "Employ",
+                           edu ~ "Education",
+                           income ~ "Income"))
+```
+
+There are some common demographic variables for both mother and child. The children median age is 14, while for parents, it is 37. Gender distribution shows 64% of children are male, whereas 98% of the parents are female. In terms of language spoken at home, 70% of children and 63% of parents do not speak another language at home. The dataset shows diversity in race and ethnity with 52% of children identifying as Hispanic/Latino and 32% of parents, but it's worth noting that future studies might benefit from including a broader array of racial backgrounds to better generalize results for the population. The detailed information are presented in Table 2.
+
+There are also some socio-economic variables unique to parents, which are 'employ', 'pedu' and 'income'. The data indicates that 54% of parents work full-time, 17% work part-time, and 29% are currently not employed. While the predominant education level is 'some college' at 37%, postgraduate degrees are the least common, accounting for only 4.9%. The median parental income is \$46,848.
+
+```{r}
+tbl_merge(
+    tbls = list(t1, t2),
+    tab_spanner = c("**Parent**", "**Child**")
+  ) %>%
+  modify_header(all_stat_cols() ~ "**{level}**") %>%
+  modify_caption("Summary for Demographic Variables") %>%
+  bold_labels() %>%
+  as_kable_extra(booktabs = T, escape = T, longtable = T) 
+```
+
+# 3. Impact of Smoking During Pregnancy (SDP) and Environmental Tobacco Smoke (ETS)
+In our dataset, there are a series of variables that are related to SDP and ETS. By combining both timing and dosage effects, we can derive two independent variables.
+
+## 4.1. SDP
+To evaluate the influence of SDP, we must consider both timing and dosage effects from the data variables. In our dataset, 4 variables pertain to SDP: 'mom_smoke_16wk', 'mom_smoke_22wk', 'mom_smoke_32wk', 'cotimean_34wk'. These were assessed in the original study. The first three variables represent self-reported current smoking status, with 1 indicating "Yes" and 0 indicating "No", which is asked at week 16, 22 and 32 during pregnancy respectively. In contrast, the last variable measures mothers' urine cotinine levels tested at 34 weeks of gestation. The following plot shows the distribution of the smoke status during pregnancy.
+
+```{r}
+####### SDP ######
+data_sdp <- data[, c('parent_id', 'mom_smoke_16wk', 'mom_smoke_22wk', 'mom_smoke_32wk', 'cotimean_34wk')]
+```
+```{r}
+# reshape the data for ploting
+data_sdp_long <- data_sdp %>%
+  gather(key = "week", value = "smoke_status", mom_smoke_16wk, mom_smoke_22wk, mom_smoke_32wk)
+data_sdp_long[data_sdp_long == "mom_smoke_16wk"] <- "16 weeks"
+data_sdp_long[data_sdp_long == "mom_smoke_22wk"] <- "22 weeks"
+data_sdp_long[data_sdp_long == "mom_smoke_32wk"] <- "32 weeks"
+```
+
+```{r}
+sdp1 <- ggplot(data_sdp_long, aes(x = week, fill = factor(smoke_status))) +
+  geom_bar(position = "dodge") +
+    scale_fill_manual(values = c("#00BFC4", "#F8766D", "grey"), 
+                    labels = c("No", "Yes", "Missing"),
+                    name = "Smoke Status") +
+  labs(x = "Week", y = "Count",
+       title = "Distribution of Smoke Status During Pregnancy across Different Weeks") 
+sdp2 <- ggplot(data_sdp, aes(x = cotimean_34wk)) +
+  geom_density(fill = "skyblue") +
+  labs(x = "Urine cotinine (nicotine metabolite) at 34 wks gestation", y = "Density")
+```
+```{r fig.width=14, fig.height = 6}
+# put the two plots side by side
+grid.arrange(sdp1, sdp2, ncol=2)
+```
+
+In order to create a new SDP variable, I first aim to assess the accuracy of mothers' self-reported smoking status by comparing their responses at week 32 to the urine cotinine levels at week 34. Typically, non-smoker is defined as a urine cotinine level of 10 ng/mL or less, while  active smokers have cotinine levels ranging from 10-500 ng/mL[@pirkleExposureUSPopulation1996]. Although there are 11 missing entries, I was able to identify 2 discrepancies in self-reporting, which could be due to either dishonest reporting or exposure to secondhand smoke. So when creating the new SDP variable, I would prioritize using 'cotimean_34wk' over 'mom_smoke_32wk' if 'cotimean_34wk' data is available. At the four time points, a smoker is identified either by a 'yes' response or by cotinine levels exceeding 10. Some mothers reported smoking at week 16 but ceased later, while others reported being non-smokers at week 16 but resumed at week 22 before quitting again.
+
+```{r, results='hide'}
+verified_smoking <- ifelse(is.na(data_sdp$mom_smoke_32wk) | is.na(data_sdp$cotimean_34wk), "Data Missing",
+                          ifelse(data_sdp$mom_smoke_32wk == 1 & data_sdp$cotimean_34wk > 10, "Honest",
+                          ifelse(data_sdp$mom_smoke_32wk == 0 & data_sdp$cotimean_34wk > 10, "Dishonest", "Non-Smoker")))
+
+table(verified_smoking)
+```
+Consequently, the mothers can be classified into three categories based on their smoking frequency: non-smoker, light-smoker, and heavy-smoker. A non-smoker is defined as a mother who reported as such across all three time points and exhibited urine cotinine levels below 10 at week 34. A light-smoker is a mother identified as a non-smoker at least once but not all time during the four time points. A heavy smoker, on the other hand, is consistently identified as a smoker throughout. For NA values of certain observations at less than 2 certain time points, I use the available information to categorize them. Finally, I identified 10 heavy-smoker, 5 light-smoker and 30 non-smoker.
+```{r, results='hide'}
+data_sdp <- data_sdp %>%
+  rowwise() %>%
+  mutate(na_count = sum(is.na(mom_smoke_16wk), is.na(mom_smoke_22wk), is.na(mom_smoke_32wk), is.na(cotimean_34wk))) %>%
+  ungroup() %>%
+  mutate(
+    sdp = case_when(
+      # If more than 2 NAs, label as NA
+      na_count > 2 ~ NA,
+
+      # Non-smoker
+      (mom_smoke_16wk == 0 | is.na(mom_smoke_16wk)) &
+      (mom_smoke_22wk == 0 | is.na(mom_smoke_22wk)) &
+      (mom_smoke_32wk == 0 | is.na(mom_smoke_32wk)) &
+      (cotimean_34wk <= 10 | is.na(cotimean_34wk)) ~ "non-smoker",
+
+      # Heavy smoker
+      mom_smoke_16wk == 1 &
+      mom_smoke_22wk == 1 &
+      mom_smoke_32wk == 1  ~ "heavy-smoker",
+
+      # Light-smoker
+      TRUE ~ "light-smoker"
+    )
+  ) %>%
+  select(-na_count)  # remove the temporary column
+
+table(data_sdp$sdp)
+```
+Then I use this new SDP variable to assess the impact of SDP on the outcome we interested.
+
+### 4.1.1. Adolescent Self-regulation
+According to description of the project, self-regulation problems encompass the maintenance of physiological, emotional, behavioral, and cognitive control. I have selected variables 'bpm_att', 'erq_cog', 'erq_exp', 'bpm_att_p', 'erq_cog_a', 'erq_exp_a', and 'childasd'. The 'bpm' variables come from the Brief Problem Monitor, where both adolescents and parents report the accuracy of specific statements about themselves or their children with questions to rate Internalizing, Attention, and Externalizing problems. The 'erq' variables come from the Emotion Regulation Questionnaire, representing cognitive reappraisal and expressive suppression. The 'childasd' variable is a metric that reflects suspicions or diagnoses of Autism Spectrum Disorder (ASD) in the child. I include this variable because both externalizing and internalizing problems can be observed in individuals with ASD.
+
+Table 3 presents the results, showing the differences in the self-regulation outcomes based on the SDP categories. Adolescents from the "heavy-smoker" group, on average, show highest median values in the variables related to attention problems for both self-assessment and parent's evaluation, indicating potential greater attention problems.  However, they exhibit moderate levels in both cognitive reappraisal and expressive suppression. Adolescents from "non-smoker" group have the lowest median values in the expressive suppression variables, while having higher median values in the cognitive reappraisal variables. It is also interesting to observe one child from the "non-smoker" group have diagonosed ASD, while none were reported in the other two categories. 
+
+```{r}
+# subset of self-regulation variables
+self_regulation <- data %>% 
+  select(parent_id, bpm_att, erq_cog, erq_exp, # child self-reg variables
+         bpm_att_p, erq_cog_a, erq_exp_a, # parent perception self-reg variables
+         childasd)
+```
+
+```{r}
+sdp_self_regulation <- cbind(self_regulation, sdp = data_sdp$sdp)
+```
+```{r}
+sdp_self_regulation[,-1] %>% 
+  tbl_summary(by = sdp,
+              type = list(bpm_att ~ "continuous",
+                          bpm_att_p ~ "continuous"),
+              label = list(bpm_att ~ "Attention Problems Self-Assessment",
+                           erq_cog ~ "Cognitive Reappraisal in Emotion Regulation",
+                           erq_exp ~ "Expressive Suppression in Emotion Regulation",
+                           bpm_att_p ~ "Child's Attention Problems Parent-Assessment",
+                           erq_cog_a ~ "Parent's Cognitive Reappraisal in Emotion Regulation",
+                           erq_exp_a ~ "Parent's Expressive Suppression in Emotion Regulation",
+                           childasd ~ "Child's Autism Spectrum Diagnosis or Suspicion"),
+              missing = "no") %>%
+  modify_caption("Comparation of Self-regulation Metrics Across SDP Categories") %>%
+  bold_labels() %>%
+  as_kable_extra(booktabs = T, escape = T) %>%
+  kable_styling(latex_options = c("HOLD_position", "scale_down"))
+```
+The following heatmap shows the interrelationships among self-regulation variables. Notably, 'bpm_att' (adolescents' self-assessment of attention problems) demonstrates a strong positive correlation of 0.50 with 'bpm_att_p' (parents' perspective on their child's attention problems), indicating a consistency between adolescent self-reports and parental observations. Moreover, 'bpm_att_p' also shows a high positive correlation of 0.53 with 'erq_exp_a', which means that greater attention problems might be associated with higher expressive suppression. The variable 'childasd' also shows moderate positive correlations with 'bpm_att_p' and 'erq_exp_a', suggesting potential relations between ASD and attention and expressive issues. Other variables only present low correlations, which are not high enough to deduce the interrelationships.
+```{r, out.width= "80%"}
+# create correlation matrix
+cor_self_regulation <- round(cor(sdp_self_regulation[,-c(1,9)], use = "complete.obs"),2)
+melted_cor_self_regulation <- melt(cor_self_regulation)
+
+# plot heatmap
+ggplot(data = melted_cor_self_regulation, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile(aes(fill = value))+
+  geom_text(aes(label = round(value, 1))) +
+  scale_fill_gradient(low = "white", high = "red")+
+  labs(title = "Correlation Heatmap among Self-regulation Variables")
+```
+
+### 4.1.2. Adolescent Substance Use
+
+```{r}
+# subset of adolescent substance use variables
+substance_use <- data %>% 
+  select(parent_id, cig_ever, num_cigs_30
+, e_cig_ever, num_e_cigs_30, mj_ever, num_mj_30, alc_ever, num_alc_30)
+```
+
+```{r}
+sdp_substance_use <- cbind(substance_use, sdp = data_sdp$sdp)
+```
+```{r, results='hide'}
+sdp_substance_use[,-1] %>% 
+  tbl_summary(by = sdp, missing = "no") %>%
+  modify_caption("Comparation of Substance Use Across SDP Categories") %>%
+  bold_labels() %>%
+  as_kable_extra(booktabs = T, escape = T) %>%
+  kable_styling(latex_options = "HOLD_position")
+```
+The following bar plot shows the proportion of adolescents with substance use across the three SDP categories. Adolescents whose mothers were categorized as "heavy-smokers" during pregnancy show the highest rates of cigarette and marijuana use, with 13% having tried cigarettes and 25% having tried with marijuana. None of the adolescent form the "non-smoker" category reported cigarette use. E-cigarette use occur across the categories, with adolescents from the "light-smoker" group showing the highest proportion at 25%. In the "non-smoker" category, e-cigarette and marijuana use was reported by a relatively small proportion, at 4.3% each. These children also have the lowest proportion in the alcohol use at 8.7%. In contrast, adolescents from the "heavy-smoker" and "light-smoker" categories reported considerably higher alcohol consumption rates, at 29% and 25%, respectively. In terms of the frequency of substance use over the past 30 days—which is asked only if substance use is responsed as "Yes" —one adolescent in the "heavy-smoker" group disclosed using e-cigarettes twice. Additionally, two children in the same group mentioned using marijuana 3 and 12 times, respectively and one adolescent in the "non-smoker" group reported using marijuana 18 times. For alcohol, two individuals from the "heavy-smoker" category consumed it once and 10 times respectively. Data regarding number of cigarette consumption was unavailable. It seems that the "heavy-smoker" group tends to report substance use in the past 30 days at a higher frequency.
+
+Smoking during pregnancy appears to have varying influences on adolescent substance use. The data suggests that adolescents with a history of heavier maternal smoking during pregnancy may be more susceptible to substance use, particularly cigarettes and marijuana. However, given the small sample sizes, further research with larger cohorts is needed to further validate these findings and draw more accurate conclusions.
+
+```{r}
+# reshape data for plotting
+sdp_substance_use_long <- sdp_substance_use %>%
+  filter(!is.na(sdp)) %>%
+  gather(key = "substance", value = "use", cig_ever, e_cig_ever, mj_ever, alc_ever) %>%
+  group_by(sdp, substance) %>%
+  summarise(proportion = mean(use, na.rm = TRUE))
+
+substance_labels <- c(
+  cig_ever = "Cigarette",
+  e_cig_ever = "E-cigarette",
+  mj_ever = "Marijuana",
+  alc_ever = "Alcohol"
+)
+```
+
+
+```{r, out.width= "80%"}
+# plotting
+ggplot(sdp_substance_use_long, aes(x = substance, y = proportion, fill = sdp)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+            position = position_dodge(width = 0.9), vjust = -0.5, size = 3) +
+  labs(title = "Proportion of Adolescents with Substance Use Across SDP Categories",
+       x = "Substance",
+       y = "Proportion",
+       fill = "SDP") +
+  scale_x_discrete(labels = substance_labels)
+```
+
+### 4.1.3. Adolescent Externalizing Problems
+
+Externalizing behaviors in children include Attention-Deficit/Hyperactivity Disorder, so when analyzing the effect of SDP on adolescent externalizing problems, in addition to 'bpm_ext', 'bpm_ext_p' that represents externalizing problems and 'childasd' regarding Autism, I included 'swan_hyperactive' and 'swan_inattentive'. These two variables are the sum of responses on SWAN Rating Scale Qs 1-9: a score of 6 or greater indicates the child is likely ADHD- Hyperactive/Impulsive type and Inattentive type respectively.
+
+Table 4 shows the summary statistics for these five variables stratified by the three SDP categories. In the "non-smoker" group, adolescents consistently show the lowest median scores across externalizing  variables, hyperactivity, and inattentiveness, suggesting fewer perceived externalizing issues. In contrast, children in the "heavy-smoker" group have the highest median scores in externalizing  variables and inattentiveness, which is much higher than children with non-smoker mother during pregnancy. For the "light-smoker" group, the data indicates moderate levels of externalizing problems. It is notable that in this group, the sum of the response for ADHD- Hyperactive/Impulsive has the highest median. All these results appear to suggest that heavier smoking during pregnancy might be linked to increased externalizing problems in offspring. 
+```{r}
+external <- data %>% 
+  select(parent_id, bpm_ext, bpm_ext_p, childasd, swan_hyperactive, swan_inattentive)
+```
+
+```{r}
+sdp_external <- cbind(external, sdp = data_sdp$sdp)
+```
+
+```{r}
+sdp_external[,-1] %>% 
+  tbl_summary(by = sdp,
+              type = list(bpm_ext ~ "continuous",
+                          bpm_ext_p ~ "continuous"),
+              label = list(  bpm_ext ~ "Child's Externalizing Behavior Problems",
+                             bpm_ext_p ~ "Parent Assessment of Child's Externalizing Behaviors",
+                             childasd ~ "Autism Spectrum Diagnosis or Suspicion Status",
+                             swan_hyperactive ~ "ADHD Hyperactivity/Impulsivity Assessment",
+                             swan_inattentive ~ "ADHD Inattentiveness Assessment"),
+              missing = "no") %>%
+  modify_caption("Comparation of Externalizing Problems Across SDP Categories") %>%
+  bold_labels() %>%
+  as_kable_extra(booktabs = T, escape = T) %>%
+  kable_styling(latex_options = c("HOLD_position", "scale_down"))
+```
+
+## 4.2. ETS
+
+Similarly, to evaluate the impact of ETS, we must consider both the frequency of ETS exposure and urine cotinine levels from both mother and baby. This data was collected in both the original and current studies. In the original study, mothers self-reported their smoking status at 12 weeks and 6 months postpartum. Urine cotinine levels were also tested for both mother and baby at 6 months postpartum. In the current study, mothers were asked to recall postpartum smoke exposure from both themselves and their partners during several time intervals: 0-6 months, 7-12 months, and the 2nd to the 5th year. It is important to note that the 6-month postpartum time point overlaps in reports from both the original and current studies. For this specific time point, if there was any reported smoking or if the urine cotinine level of mom or baby exceeded 10 ng/mL, I would code it as 1, indicating that there was smoke exposure at 6 months postpartum. The following plot shows the distribution of postnatal smoke exposure across different time points. The density plot of the urine cotinine levels in mothers and babies at 6 months postpartum reveals a broader distribution for mothers and mothers tend to have significantly higher cotinine levels compared to babies. The distribution of mothers' cotinine levels at 6 months is similar to that at 34 weeks gestation.
+
+```{r}
+####### ETS ######
+data_ets <- data[, c('parent_id', 'mom_smoke_pp6mo', 'cotimean_pp6mo', 'cotimean_pp6mo_baby', 'smoke_exposure_6mo', 'smoke_exposure_12mo', 'smoke_exposure_2yr', 'smoke_exposure_3yr', 'smoke_exposure_4yr', 'smoke_exposure_5yr')]
+```
+
+```{r}
+# reshape the data for ploting
+data_ets_long <- data_ets %>%
+  gather(key = "Time", value = "smoke_exposure",
+         mom_smoke_pp6mo, smoke_exposure_6mo, smoke_exposure_12mo, smoke_exposure_2yr, smoke_exposure_3yr, smoke_exposure_4yr, smoke_exposure_5yr)
+
+data_ets_long[data_ets_long == "mom_smoke_pp6mo"] <- "6mo (original)"
+data_ets_long[data_ets_long == "smoke_exposure_6mo"] <- "6mo (current)"
+data_ets_long[data_ets_long == "smoke_exposure_12mo"] <- "12mo"
+data_ets_long[data_ets_long == "smoke_exposure_2yr"] <- "2 years"
+data_ets_long[data_ets_long == "smoke_exposure_3yr"] <- "3 years"
+data_ets_long[data_ets_long == "smoke_exposure_4yr"] <- "4 years"
+data_ets_long[data_ets_long == "smoke_exposure_5yr"] <- "5 years"
+
+data_ets_long$Time <- factor(data_ets_long$Time, levels = c("6mo (original)", "6mo (current)", "12mo", "2 years", "3 years", "4 years", "5 years"))
+```
+
+```{r}
+# plots
+ets1 <- ggplot(data_ets_long, aes(x = Time, fill = factor(smoke_exposure))) +
+  geom_bar(position = "dodge") +
+    scale_fill_manual(values = c("#00BFC4", "#F8766D", "grey"), 
+                    labels = c("No", "Yes", "Missing"),
+                    name = "Smoke Status") +
+  labs(x = "Week", y = "Count",
+       title = "Distribution of Smoke Exposure postpartum") 
+
+data_ets_long2 <- data_ets %>%
+  select(cotimean_pp6mo, cotimean_pp6mo_baby) %>%
+  gather(key = "Participant", value = "value")
+
+ets2 <- ggplot(data_ets_long2, aes(x = value, fill = Participant)) +
+  geom_density(alpha = 0.5) +  # alpha is for transparency, adjust if needed
+  scale_fill_manual(values = c("cotimean_pp6mo" = "#00BFC4", "cotimean_pp6mo_baby" = "#F8766D"),
+                    labels = c("Mother", "Baby"),
+                    name = "Participant") +
+  labs(x = "Urine cotinine (nicotine metabolite) at 6 months postpartum", y = "Density")
+```
+```{r fig.width=15, fig.height = 6}
+# put the two plots side by side
+grid.arrange(ets1, ets2, ncol=2)
+```
+
+Following the same logic used when creating the SDP variable, ETS has three levels: no-exposure, light-exposure, and heavy-exposure. A child is classified as having no-exposure if no smoke exposures were reported across all six time points. Light-exposure is when there were 1-2 time points reported smoke exposure. Heavy-exposure is classified when more than 2 time points have reported smoke exposure. Finally, I identified 10 heavy-exposure, 10 light-exposure and 13 no-exposure.
+
+
+```{r, results='hide'}
+# create new variable ets
+data_ets <- data_ets %>%
+  mutate(
+    ets = case_when(
+      # Counting exposure points
+      (mom_smoke_pp6mo == 1 | cotimean_pp6mo > 10 | cotimean_pp6mo_baby > 10 | smoke_exposure_6mo == 1) + 
+      (smoke_exposure_12mo == 1) + 
+      (smoke_exposure_2yr == 1) + 
+      (smoke_exposure_3yr == 1) + 
+      (smoke_exposure_4yr == 1) + 
+      (smoke_exposure_5yr == 1) == 0 ~ "no-exposure",
+
+      (mom_smoke_pp6mo == 1 | cotimean_pp6mo > 10 | cotimean_pp6mo_baby > 10 | smoke_exposure_6mo == 1) + 
+      (smoke_exposure_12mo == 1) + 
+      (smoke_exposure_2yr == 1) + 
+      (smoke_exposure_3yr == 1) + 
+      (smoke_exposure_4yr == 1) + 
+      (smoke_exposure_5yr == 1) <= 2 ~ "light-exposure",
+
+      (mom_smoke_pp6mo == 1 | cotimean_pp6mo > 10 | cotimean_pp6mo_baby > 10 | smoke_exposure_6mo == 1) + 
+      (smoke_exposure_12mo == 1) + 
+      (smoke_exposure_2yr == 1) + 
+      (smoke_exposure_3yr == 1) + 
+      (smoke_exposure_4yr == 1) + 
+      (smoke_exposure_5yr == 1) > 2 ~ "heavy-exposure"
+    )
+  ) 
+
+# summary of ets
+table(data_ets$ets)
+```
+
+### 4.2.1. Adolescent Self-regulation
+
+Table 5 shows the results of self-regulation variables across the three ETS categories. Except for variables associated with cognitive reappraisal and child Autism, adolescents in the heavy-exposure category consistently exhibit the highest median values for the other variables. Adolescents in the category "light-exposure" have the highest median in children responses to cognitive reappraisal and share highest median with the "no-exposure" category for parent's responses cognitive reappraisal. Only one child in the category "no-exposure" was suspected with ASD. This table suggests a potential positive association between heavier smoke exposure and self-regulation problems regarding attention and expressive suppression.
+
+```{r}
+ets_self_regulation <- cbind(self_regulation, ets = data_ets$ets)
+```
+```{r}
+ets_self_regulation[,-1] %>% 
+  tbl_summary(by = ets,
+              type = list(bpm_att ~ "continuous",
+                          bpm_att_p ~ "continuous"),
+              label = list(bpm_att ~ "Attention Problems Self-Assessment",
+                           erq_cog ~ "Cognitive Reappraisal in Emotion Regulation",
+                           erq_exp ~ "Expressive Suppression in Emotion Regulation",
+                           bpm_att_p ~ "Child's Attention Problems Parent-Assessment",
+                           erq_cog_a ~ "Parent's Cognitive Reappraisal in Emotion Regulation",
+                           erq_exp_a ~ "Parent's Expressive Suppression in Emotion Regulation",
+                           childasd ~ "Child's Autism Spectrum Diagnosis or Suspicion"),
+              missing = "no") %>%
+  modify_caption("Comparation of Self-regulation Metrics Across ETS Categories") %>%
+  bold_labels() %>%
+  as_kable_extra(booktabs = T, escape = T) %>%
+  kable_styling(latex_options = c("HOLD_position", "scale_down"))
+```
+
+### 4.2.2. Adolescent Substance Use
+```{r}
+ets_substance_use <- cbind(substance_use, ets = data_ets$ets)
+```
+```{r, results='hide'}
+ets_substance_use[,-1] %>% 
+  tbl_summary(by = ets, missing = "no") %>%
+  modify_caption("Comparation of Substance Use Across ETS Categories") %>%
+  bold_labels() %>%
+  as_kable_extra(booktabs = T, escape = T) %>%
+  kable_styling(latex_options = "HOLD_position")
+```
+
+```{r}
+# reshape data for plotting
+ets_substance_use_long <- ets_substance_use %>%
+  filter(!is.na(ets)) %>%
+  gather(key = "substance", value = "use", cig_ever, e_cig_ever, mj_ever, alc_ever) %>%
+  group_by(ets, substance) %>%
+  summarise(proportion = mean(use, na.rm = TRUE))
+```
+
+The following bar plot illustrates the substance use of adolescents categorized by their smoke exposure levels. It is worth noting that across all types of substances, adolescents in the "no-exposure" group have the lowest proportion of reported substance use. There is only one child reported e-cigarette use, leading to a proportion of 8.3% in the "no-exposure" category. In contrast, the "light-exposure" group has the highest proportions of substance use across all categories. For alcohol consumption, both the heavy-exposure and light-exposure groups reported an identical usage rate of 11%. In the case of traditional cigarettes, only adolescents in the "light-exposure" group reported any use, accounting for 11%, while no use was reported in the other groups. For e-cigarettes, the "heavy-exposure" and "light-exposure" groups have very close proportions, with 10% and 11% respectively. Marijuana consumption was only reported in the "light-exposure" group with a proportion of 33%. These figures suggest that while substance use rates appear to be influenced by environmental smoking exposure, heavier exposure does not necessarily result in increased usage.
+```{r, out.width= "80%"}
+# plotting
+ggplot(ets_substance_use_long, aes(x = substance, y = proportion, fill = ets)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+            position = position_dodge(width = 0.9), vjust = -0.5, size = 3) +
+  labs(title = "Proportion of Adolescents with Substance Use Across ETS Categories",
+       x = "Substance",
+       y = "Proportion",
+       fill = "ETS") +
+  scale_x_discrete(labels = substance_labels)
+```
+### 4.2.3. Adolescent Externalizing Problems
+
+```{r}
+ets_external <- cbind(external, ets = data_ets$ets)
+```
+
+The following Table 6 presents a comparison of externalizing problems ETS exposure categories. For the Brief Problem Monitor externalizing scale (`bpm_ext` and `bpm_ext_p`), adolescents in the "heavy-exposure" group consistently exhibit higher median scores, which suggests a possible higher degree of externalizing issues. The "no-exposure" group has the lowest median scores, indicating the fewest externalizing problems among the three categories. In terms of the two variables about ADHD ('swan_hyperactive' and 'swan_inattentive'), they shows a different pattern. Regarding the Hyperactive/Impulsive type ADHD, the data indicates that adolescents from the "light-exposure" group have the highest median score, while the "no-exposure" group still exhibits the lowest median score. In terms of Inattentive type, the "heavy-exposure" group presents the highest median value and the "no-exposure" group reports lowest median value. This table highlights that adolescents with heavier smoke exposure tend to show more pronounced externalizing problems, while those with no smoke exposure show fewer issues.
+
+```{r}
+ets_external[,-1] %>% 
+  tbl_summary(by = ets,
+              type = list(bpm_ext ~ "continuous",
+                          bpm_ext_p ~ "continuous"),
+              label = list(  bpm_ext ~ "Child's Externalizing Behavior Problems",
+                             bpm_ext_p ~ "Parent Assessment of Child's Externalizing Behaviors",
+                             childasd ~ "Autism Spectrum Diagnosis or Suspicion Status",
+                             swan_hyperactive ~ "ADHD Hyperactivity/Impulsivity Assessment",
+                             swan_inattentive ~ "ADHD Inattentiveness Assessment"),
+              missing = "no") %>%
+  modify_caption("Comparation of Externalizing Problems Across ETS Categories") %>%
+  bold_labels() %>%
+  as_kable_extra(booktabs = T, escape = T) %>%
+  kable_styling(latex_options = c("HOLD_position", "scale_down"))
+```
+## 4.3. Interrelatedness of prenatal and postnatal exposure
+
+```{r}
+data_sdp_ets <- cbind(data_sdp[, c("parent_id", "sdp")], ets=data_ets$ets)
+```
+Table 7 presents the distribution of postnatal environmental tobacco smoke (ETS) exposure across categories of smoking during pregnancy (SDP). For mothers identified as "heavy-smokers" during pregnancy, a significant 75% of their children were found to have "heavy-exposure" to ETS after birth. 25% of these children experienced "light-exposure" ETS after birth, while no child in this category was found to have "no-exposure" ETS. This suggests that the mother's smoking behavior continued after the child was born. In the category of "light-smoker", half of the children in this group have "heavy-exposure", while 25% experience "light-exposure" and another 25% have "no-exposure". Lastly, for children whose mothers were "nonsmokers" during pregnancy, the majority (55%) had been unexposed to ETS postpartum. However, there were still 10% of these children who had been heavily exposed to ETS postpartum and 35% in the category of "light-exposure", which might be due to either the mothers picking up smoking after childbirth or the smoking from their partners. There seems to be a correlation between prenatal smoking behaviors of mothers and the postnatal ETS exposure. Children with mothers who smoked heavily during pregnancy are more likely to experience higher levels of postnatal ETS.
+```{r}
+data_sdp_ets[, -1] %>% tbl_summary(by = sdp) %>%
+  modify_caption("Correlation between SDP and ETS") %>%
+  bold_labels() %>%
+  as_kable_extra(booktabs = T, escape = T) %>%
+  kable_styling(latex_options = "HOLD_position")
+```
+We can also check mother's substance use history. The variables 'nidaalc', 'nidatob', 'nidapres', and 'nidaill' are realted to substance use behaviors. They represent the mother's consumption response for alcohol, tobacco, prescription drugs, and illegal drugs respectively. The categorization for these variables is 0 = Never, 1 = Once or Twice, 2 = Monthly, 3= Weekly, 4 = Daily or almost daily. The variable 'momcig' is about the number of days the past 30 days the mother smoke, and 'mom_numcig' is related the average number of cigarettes mother consumes daily.
+
+The following Table 8 then shows the comparison of these characteristics across both SDP and ETS categories. There are some similar patterns observed in SDP and ETS. For instance, in the 'nidalc' and 'nidatob' variables, both heavy-smoker and heavy-exposure groups have higher frequencies of substance usage, suggesting that heavier prenatal and postnatal smoke exposures are possibly associated with increased recent substance use. The trend is also observed in 'nidaill', but no so obvious. It is also found that while some mothers in the "light-smoker" category during pregnancy report no cigarette usage ('momcig' and 'mom_numcig' variables), a few have picked up the habit post-pregnancy. This indicates that while some mothers may quit smoking during pregnancy, they might resume or initiate the habit postnatally, posing an ETS risk for their children.
+
+```{r}
+mom_sub <- cbind(data[, c("parent_id", "nidaalc", "nidatob", "nidapres", "nidaill", "momcig", "mom_numcig")],sdp = data_sdp$sdp, ets = data_ets$ets)
+mom_sub$mom_numcig <- as.numeric(mom_sub$mom_numcig)
+```
+
+```{r}
+t1 <- mom_sub[, -c(1,9)] %>% 
+  tbl_summary(by = sdp,
+    type = list(momcig ~ "continuous",
+                          mom_numcig ~ "continuous"),
+    missing = "no")
+
+t2 <- mom_sub[, -c(1,8)] %>% 
+  tbl_summary(by = ets,
+    type = list(momcig ~ "continuous",
+                          mom_numcig ~ "continuous"),
+    missing = "no")
+```
+```{r}
+tbl_merge(list(t1, t2), tab_spanner = c("**SDP**", "**ETS**"))%>%
+  as_kable_extra(booktabs = T, escape = T,
+                 caption = "Parental Substance Usage and Frequency") %>%
+  kable_styling(latex_options = c("scale_down"))
+```
+
+
+# 5. Recommendations and Future Study
+
+Our current exploratory data analysis is limited due to several reasons. Firstly, the sample size of our dataset is very small with only 49 observations, which might limit the generalization of our findings as they may not accurately reflect the variety of the population. Additionally, when estimating the intensity of SDP and ETS, our two new independent variables (IVs) heavily rely on self-reported data, which sometimes could be unreliable due to recall bias or participants' reluctance to disclose certain information. Furthermore, the study has a large number of missing values. Imputation methods might not be applicable given the small sample size and the nature of our variables, which are mostly categorically nominal. The missing values can challenge the robustness of our results. For future studies, it is recommended to re-recruit more participants to increase the sample size, which is helpful to improve the statistical power and generality of the study. Researchers could also improve study design or refine the administration process. For example, arranging more urine cotinine tests might be more reliable than depending solely on self-report. Moreover, there are missing values in some basic demographic characteristics, which should be avoided when documenting participants' information. Extending the follow-up period might also help in reducing memory bias. If these issues are handled, future study could provide more conclusive and comprehensive insights into the impact of SDP and ETS.
+
+# 6. Conclusion
+Based on our previous analysis, it can be found that there is a potential positive trend linking prenatal and postnatal smoke exposure to various adolescent issues. Both Smoking During Pregnancy (SDP) and Environmental Tobacco Smoke (ETS) exposure seem to play a significant role in influencing self-regulation metrics, rates of substance use, and externalizing problems among adolescents. Specifically, as the intensity of SDP and ETS exposure increases, it can be observed a corresponding rise in median values across self-regulation scores, ratings from questionnaires, and the proportion of adolescents reporting substance use. But there are still several variables that did not follow this pattern, such as variables related cognitive reappraisal and ASD. This findings suggests that smoke exposure both during and after pregnancy, could have negative effects on child development. However, the conclusions drawn here are limited by the small sample size of the study and the lack of statistical validations from various tests.
+
+# References
