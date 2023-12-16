@@ -40,5 +40,10 @@ Link to repository: https://github.com/Rosy98/PHP2550-Project-2
 
 Link to repository: https://github.com/Rosy98/PHP2550-Project-3
 
+## Collaborators
+- Dr. Lauren Micalizzi, Brown University
+- Dr. Robin McKinney, Dr. Chris Schmid, Brown University
+- Dr. Jon Steingrimsson, Brown University
+
 ## License
 Distributed under the MIT License. 
