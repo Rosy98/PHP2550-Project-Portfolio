@@ -16,6 +16,8 @@ Each folder contains a readme file that describes each project.
 ### Project 1
 This study investigates the effects of maternal smoking during pregnancy (SDP) and environmental tobacco smoke (ETS) exposure on adolescent self-regulation and behavioral outcomes. We analyzed data from 49 mother-child pairs, evaluating 79 variables related to demographics, smoke exposure, and behavioral assessments. The analysis indicates a correlation between increased SDP/ETS and self-regulation issues, substance use, and externalizing behaviors among adolescents. These associations suggest potential long-term impacts of prenatal and postnatal smoke exposure on child development. The findings, limited by the study's sample size and self-reported data, underline the necessity for future research to confirm these trends.
 
+Link to repository: https://github.com/Rosy98/PHP2550-Project-1
+
 ### Project 2
  **Aim:** This study aims to develop a model predicting the necessity and timing of tracheostomy in infants with severe Bronchopulmonary Dysplasia (BPD), using a rich dataset from the BPD Collaborative Registry. It examines demographic and clinical variables to identify significant predictors of tracheostomy or death.
  
@@ -24,6 +26,8 @@ This study investigates the effects of maternal smoking during pregnancy (SDP) a
 **Result:** Both best subset and lasso regression models, using a mixed-effects approach, effectively identified factors influencing tracheotomy/death in infants with severe BPD. The Best Subset model at 36 weeks had a Brier Score of 0.0835 and an AUC of 0.8920, while the Lasso model at 44 weeks showed a Brier Score of 0.0923 and an AUC of 0.8853. However, calibration plots indicated some deviation in the 44-week models.
   
 **Conclusions:** The project reveals key factors impacting tracheotomy timing in severe BPD infants, highlighting birth metrics, respiratory support, and pulmonary hypertension medication. However, hese models need to be improved considering logistic regression assumptions such as linearity, outlier influence, and multicollinearity.
+
+Link to repository: https://github.com/Rosy98/PHP2550-Project-2
   
 ### Project 3
  **Aim:** This study aims to assess the transportability of a gender-specific risk score model for cardiovascular diseases (CVD), built using data from the Framingham Heart Study (FHS), to the population underlying the NHANES (National Health and Nutrition Examination Survey) survey data through a simulation study. 
@@ -33,6 +37,8 @@ This study investigates the effects of maternal smoking during pregnancy (SDP) a
 **Result:** The average Brier scores for FHS are 0.1993 for men and 0.1184 for women. When the model is applied to NHANES, the Brier Scores change to 0.2013 for men and 0.1374 for women. The Brier scores for the simulated NHANES data have a mean of 0.2123 with a standard deviation of 0.0263 for men, and a mean of 0.1278 with a standard deviation of 0.0149 for women.
 
 **Conclusions:** The analysis reveals that the model for women achieves a higher Brier Score than the model for men across all three datasets, suggesting that the transportability of the model is better for women than for men. They highlight the challenges in transporting prediction models across diverse populations, emphasizing the impact of varying covariate distributions on model performance. The transportability of the Brier Score is constrained by two identification conditions. Future research could focus on additional performance metrics, such as the AUC, and on developing methods to better address missing data.
+
+Link to repository: https://github.com/Rosy98/PHP2550-Project-3
 
 ## License
 Distributed under the MIT License. 
